@@ -3,11 +3,12 @@ package config
 import (
 	"fmt"
 
-    "go.containerssh.io/containerssh/internal/structutils"
-    "go.containerssh.io/containerssh/message"
+	"go.containerssh.io/containerssh/internal/structutils"
+	"go.containerssh.io/containerssh/message"
 )
 
 // AppConfig is the root configuration object of ContainerSSH.
+//
 //goland:noinspection GoDeprecation
 type AppConfig struct {
 	// SSH contains the configuration for the SSH server.
@@ -19,6 +20,9 @@ type AppConfig struct {
 	// Auth contains the configuration for user authentication.
 	// swagger:ignore
 	Auth AuthConfig `json:"auth" yaml:"auth"`
+	// CleanupServer contains the settings for fetching the user-specific cleanup webhook.
+	// swagger:ignore
+	CleanupServer HTTPClientConfiguration `json:"cleanupserver" yaml:"cleanupserver"`
 	// Log contains the configuration for the logging level.
 	// swagger:ignore
 	Log LogConfig `json:"log" yaml:"log"`
@@ -123,6 +127,11 @@ func (cfg *AppConfig) Validate(dynamic bool) error {
 	if cfg.ConfigServer.URL != "" && !dynamic {
 		return queue.Validate()
 	}
+
+	if cfg.CleanupServer.URL != "" {
+		queue.add("cleanupserver", &cfg.CleanupServer)
+	}
+
 	queue.add("security", &cfg.Security)
 	queue.add("backend", &cfg.Backend)
 	switch cfg.Backend {

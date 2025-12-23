@@ -3,14 +3,16 @@ package backend
 import (
 	"sync"
 
-    "go.containerssh.io/containerssh/config"
-    internalConfig "go.containerssh.io/containerssh/internal/config"
-    "go.containerssh.io/containerssh/internal/metrics"
-    "go.containerssh.io/containerssh/internal/sshserver"
-    "go.containerssh.io/containerssh/log"
+	"go.containerssh.io/containerssh/config"
+	"go.containerssh.io/containerssh/http"
+	internalConfig "go.containerssh.io/containerssh/internal/config"
+	"go.containerssh.io/containerssh/internal/metrics"
+	"go.containerssh.io/containerssh/internal/sshserver"
+	"go.containerssh.io/containerssh/log"
 )
 
 // New creates a new backend handler.
+//
 //goland:noinspection GoUnusedExportedFunction
 func New(
 	config config.AppConfig,
@@ -27,6 +29,17 @@ func New(
 		return nil, err
 	}
 
+	var cleanupClient http.Client
+	if config.CleanupServer.URL != "" {
+		cleanupClient, err = http.NewClient(
+			config.CleanupServer,
+			logger,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	backendRequestsCounter := metricsCollector.MustCreateCounter(
 		MetricNameBackendRequests,
 		MetricUnitBackendRequests,
@@ -41,6 +54,7 @@ func New(
 	return &handler{
 		config:                 config,
 		configLoader:           loader,
+		cleanupClient:          cleanupClient,
 		authResponse:           defaultAuthResponse,
 		metricsCollector:       metricsCollector,
 		logger:                 logger,
