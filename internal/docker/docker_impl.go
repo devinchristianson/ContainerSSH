@@ -14,8 +14,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	imageType "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"go.containerssh.io/containerssh/config"
@@ -117,7 +119,7 @@ func (d *dockerV20Client) pullImage(ctx context.Context) error {
 		return err
 	}
 
-	options := types.ImagePullOptions{}
+	options := imageType.PullOptions{}
 	if d.config.Execution.Auth != nil {
 		jsonEncodedCredentials, err := json.Marshal(d.config.Execution.Auth)
 		if err != nil {
@@ -147,8 +149,8 @@ loop:
 		if pullReader != nil {
 			_ = pullReader.Close()
 		}
-		if client.IsErrUnauthorized(lastError) ||
-			client.IsErrNotFound(lastError) ||
+		if errdefs.IsUnauthorized(lastError) ||
+			errdefs.IsNotFound(lastError) ||
 			strings.Contains(lastError.Error(), "no basic auth credential") {
 			err = message.WrapUser(
 				lastError,
@@ -205,7 +207,7 @@ func (d *dockerV20Client) createContainer(
 	var lastError error
 loop:
 	for {
-		var body container.ContainerCreateCreatedBody
+		var body container.CreateResponse
 		d.backendRequestsMetric.Increment()
 		body, lastError = d.dockerClient.ContainerCreate(
 			ctx,
@@ -308,7 +310,7 @@ loop:
 		attachResult, lastError = d.dockerClient.ContainerAttach(
 			ctx,
 			d.containerID,
-			types.ContainerAttachOptions{
+			container.AttachOptions{
 				Stream: true,
 				Stdin:  true,
 				Stdout: true,
@@ -358,7 +360,7 @@ loop:
 		lastError = d.dockerClient.ContainerStart(
 			ctx,
 			d.containerID,
-			types.ContainerStartOptions{},
+			container.StartOptions{},
 		)
 		if lastError == nil {
 			return nil
@@ -475,7 +477,7 @@ loop:
 		if lastError == nil {
 			d.backendRequestsMetric.Increment()
 			lastError = d.dockerClient.ContainerRemove(
-				ctx, d.containerID, types.ContainerRemoveOptions{
+				ctx, d.containerID, container.RemoveOptions{
 					Force: true,
 				},
 			)
@@ -565,7 +567,7 @@ func (d *dockerV20Container) lockedCreateExec(
 	}, nil
 }
 
-func (d *dockerV20Container) realCreateExec(ctx context.Context, execConfig types.ExecConfig) (string, error) {
+func (d *dockerV20Container) realCreateExec(ctx context.Context, execConfig container.ExecOptions) (string, error) {
 	d.logger.Debug(message.NewMessage(message.MDockerExecCreate, "Creating exec..."))
 	var lastError error
 loop:
@@ -598,7 +600,7 @@ loop:
 	return "", err
 }
 
-func (d *dockerV20Container) createExecConfig(env map[string]string, tty bool, program []string) types.ExecConfig {
+func (d *dockerV20Container) createExecConfig(env map[string]string, tty bool, program []string) container.ExecOptions {
 	dockerEnv := createEnv(env)
 	if !d.config.Execution.DisableAgent {
 		agentPrefix := []string{
@@ -609,7 +611,7 @@ func (d *dockerV20Container) createExecConfig(env map[string]string, tty bool, p
 		}
 		program = append(agentPrefix, program...)
 	}
-	execConfig := types.ExecConfig{
+	execConfig := container.ExecOptions{
 		Tty:          tty,
 		AttachStdin:  true,
 		AttachStderr: true,
@@ -630,7 +632,7 @@ func createEnv(env map[string]string) []string {
 	return dockerEnv
 }
 
-func (d *dockerV20Container) attachExec(ctx context.Context, execID string, config types.ExecConfig) (types.HijackedResponse, error) {
+func (d *dockerV20Container) attachExec(ctx context.Context, execID string, config container.ExecOptions) (types.HijackedResponse, error) {
 	d.logger.Debug(message.NewMessage(message.MDockerExecAttach, "Attaching exec..."))
 	var attachResult types.HijackedResponse
 	var lastError error
@@ -640,7 +642,7 @@ loop:
 		attachResult, lastError = d.dockerClient.ContainerExecAttach(
 			ctx,
 			execID,
-			types.ExecStartCheck{
+			container.ExecAttachOptions{
 				Detach: false,
 				Tty:    config.Tty,
 			},
@@ -867,7 +869,7 @@ func (d *dockerV20Exec) resize(ctx context.Context, height uint, width uint) err
 	var lastError error
 loop:
 	for {
-		resizeOptions := types.ResizeOptions{
+		resizeOptions := container.ResizeOptions{
 			Height: height,
 			Width:  width,
 		}
@@ -1153,7 +1155,7 @@ func (d *dockerV20Exec) containerInspect(
 }
 
 func (d *dockerV20Exec) execInspect(ctx context.Context, onExit func(exitStatus int)) (lastError error) {
-	var inspectResult types.ContainerExecInspect
+	var inspectResult container.ExecInspect
 	inspectResult, lastError = d.dockerClient.ContainerExecInspect(ctx, d.execID)
 	if lastError == nil {
 		if inspectResult.Running {
@@ -1187,10 +1189,13 @@ loop:
 			if inspectResult.State.Status == "stopped" {
 				return nil
 			}
+			timeout := int(d.container.config.Timeouts.ContainerStop.Seconds())
 			lastError = d.dockerClient.ContainerStop(
 				ctx,
 				d.container.containerID,
-				&d.container.config.Timeouts.ContainerStop)
+				container.StopOptions{
+					Timeout: &timeout,
+				})
 			if lastError == nil {
 				return nil
 			}
@@ -1215,8 +1220,7 @@ loop:
 }
 
 func isPermanentError(err error) bool {
-	return client.IsErrNotFound(err) ||
-		client.IsErrNotImplemented(err) ||
-		client.IsErrPluginPermissionDenied(err) ||
-		client.IsErrUnauthorized(err)
+	return errdefs.IsNotFound(err) ||
+		errdefs.IsNotImplemented(err) ||
+		errdefs.IsUnauthorized(err)
 }

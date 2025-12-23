@@ -14,6 +14,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	containerType "github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 )
@@ -177,7 +178,7 @@ func (d *dockerContainer) id() string {
 func (d *dockerContainer) pull() {
 	d.t.Helper()
 	d.t.Logf("Pulling image %s...", d.image)
-	reader, err := d.client.ImagePull(context.Background(), d.image, types.ImagePullOptions{})
+	reader, err := d.client.ImagePull(context.Background(), d.image, image.PullOptions{})
 	if err != nil {
 		d.t.Fatalf("failed to pull container image %s (%v)", d.image, err)
 	}
@@ -232,7 +233,7 @@ func (d *dockerContainer) create() {
 func (d *dockerContainer) start() {
 	d.t.Helper()
 	d.t.Logf("Starting container %s...", d.containerID)
-	if err := d.client.ContainerStart(context.Background(), d.containerID, types.ContainerStartOptions{}); err != nil {
+	if err := d.client.ContainerStart(context.Background(), d.containerID, containerType.StartOptions{}); err != nil {
 		d.t.Fatalf("failed to start container %s (%v)", d.containerID, err)
 	}
 }
@@ -240,7 +241,7 @@ func (d *dockerContainer) start() {
 func (d *dockerContainer) remove() {
 	d.t.Helper()
 	d.t.Logf("Removing container ID %s...", d.containerID)
-	if err := d.client.ContainerRemove(context.Background(), d.containerID, types.ContainerRemoveOptions{
+	if err := d.client.ContainerRemove(context.Background(), d.containerID, containerType.RemoveOptions{
 		RemoveVolumes: false,
 		RemoveLinks:   false,
 		Force:         true,
