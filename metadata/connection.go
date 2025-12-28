@@ -232,7 +232,7 @@ func (meta *ConnectionMetadata) Merge(newMeta ConnectionMetadata) {
 		maps.Copy(meta.Metadata, newMeta.GetMetadata())
 	}
 	if newMeta.GetFiles() != nil {
-		maps.Copy(meta.Files, newMeta.GetFiles())
+		maps.Copy(meta.GetFiles(), newMeta.GetFiles())
 	}
 	if newMeta.GetEnvironment() != nil {
 		maps.Copy(meta.Environment, newMeta.GetEnvironment())
